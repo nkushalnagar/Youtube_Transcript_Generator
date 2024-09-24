@@ -15,6 +15,7 @@ client = OpenAI(
     api_key = keys.key_api
 )
 
+# Remove special characters from string, allows to reformat title in future
 def remove_special_characters_from_string(string):
     string_list = []
     for i in string:
@@ -25,19 +26,24 @@ def remove_special_characters_from_string(string):
 
     return new_string
 
+# Use webdriver to open link in chrome and parse with beatifulsoup
 def open_url_in_chrome(url):
-    #print(f'Opening {url}')
+    print('Opening ' + url)
     driver = webdriver.Chrome()
     driver.get(url)
     time.sleep(3)
     soup = BeautifulSoup(driver.page_source, 'html.parser')
     return driver
 
+#Dismiss pop up offer on Youtube, this offer has been known to change at some point, code will thus need to be modified here
 def dismiss_offer(driver):
     # Click 'dismiss'
     driver.find_element(By.XPATH,"//*[@id='dismiss-button']/yt-button-shape").click()
 
+#Click the necessary buttons to eventually get the auto-generated English transcript for the Youtube video
 def get_transcript(driver):
+    
+    #If pop-up exists click if not continue
     try:
         print('Dismissing offer')
         dismiss_offer(driver)
@@ -59,6 +65,7 @@ def get_transcript(driver):
 
     return transcript
 
+# Gets title of video
 def get_title(driver):
     video_element = driver.find_element(By.XPATH, "/html/body/ytd-app/div[1]/ytd-page-manager/ytd-watch-flexy/div[5]/div[1]/div/div[2]/ytd-watch-metadata/div/div[1]/h1/yt-formatted-string")
     title = video_element.text
@@ -67,6 +74,7 @@ def get_title(driver):
     
     return title
 
+# Creates a dataframe with timestamps and text from transcript
 def transcript2df(transcript):
     transcript = transcript.split('\n')
     transcript_timestamps = transcript[::2]
@@ -77,6 +85,7 @@ def transcript2df(transcript):
     
     return df
 
+# Uses previous functions to return df of transcript of link provided
 def webscrape_transcript(url):
     global title
 
@@ -92,10 +101,10 @@ def webscrape_transcript(url):
 
     return df
 
-#takes dataframe of transcript and uses chatGPT LLM to analyze who's speaking when and return a properly formatted transcript in the form of string
+# Takes dataframe of transcript and uses chatGPT LLM to analyze who's speaking when and return a properly formatted transcript in the form of string
 def compile_new_transcript(scraped_df,title):
     #create a csv version of the transcript
-    #scraped_df.to_csv(title + '.csv', index=False)
+    scraped_df.to_csv(title + '.csv', index=False)
     text_transcript = scraped_df.to_string()
     completion = client.chat.completions.create(
         model = "gpt-4o-2024-08-06",
@@ -106,6 +115,7 @@ def compile_new_transcript(scraped_df,title):
     )
     return completion.choices[0].message.content
 
+# Write new text file named the title of video and containing final transcript
 def write_text_file(final_transcript, title):
     with open(title + '.txt', 'w') as file:
         file.write(final_transcript)
@@ -113,6 +123,7 @@ def write_text_file(final_transcript, title):
     #doc = aw.Document(title + ".txt")
     #doc.save(title + ".docx")
 
+# Take input as either a txt file with links or one link and output .txt transcripts
 def main():
     text_file_question = input("Are you inputting a text file(Y or N): ")
 
