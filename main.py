@@ -7,12 +7,12 @@ from bs4 import BeautifulSoup
 import re
 from openai import OpenAI
 import aspose.words as aw
-import api
+import keys
 
 title = ""
 
 client = OpenAI(
-    api_key = api.api_key
+    api_key = keys.key_api
 )
 
 def remove_special_characters_from_string(string):
