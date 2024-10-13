@@ -10,10 +10,15 @@ import aspose.words as aw
 import keys
 
 title = ""
-
+question = "Hello! Can you help me format this transcript so that it shows who is speaking at which point in time? The first string of text are the timestamps and the second are the respective texts - they should match up. Ensure you include all text in the output - the output should be the entire transcript, no shortcuts. Clump text together and don't feel the need to repeat speaker title (name) until there is a speaker change. Also, please provide accurate timestamps consistantly. Note that the speaker might be referenced after they have spoken in words such as Thank you Steven or a similar phrase, but might not be properly introduced so do not get tricked by this. Try to be as accurate as possible when identifying speakers and use surrounding text as context. Output should also look professional (hopefully you have consistent definition of this that you can follow) and include the title, who is speaking at the top, and if you can when and where this is happening at the top. Please don't include a personalized message such as Yes, I can do this for you in response to my question."
+question_2 = "Hello! Can you help me format this transcript so that it shows who is speaking at which point in time? The first string of text are the timestamps and the second are the respective texts - they should match up. Ensure you include all text in the output - the output should be the entire transcript, no shortcuts. Clump text together and don't feel the need to repeat speaker title (name) until there is a speaker change. Also, please provide accurate timestamps consistantly. Note that the speaker might be referenced after they have spoken in words such as Thank you Steven or a similar phrase, but might not be properly introduced so do not get tricked by this. Try to be as accurate as possible when identifying speakers and use surrounding text as context. Output should also look professional (hopefully you have consistent definition of this that you can follow). Please don't include a personalized message such as Yes, I can do this for you in response to my question. Also, this transcript is a continuation or ending of a longer video so don't bother including the details at the top."
 client = OpenAI(
     api_key = keys.key_api
 )
+
+def split_string(string):
+        return string[:119000], string[119000:]
+
 
 # Remove special characters from string, allows to reformat title in future
 def remove_special_characters_from_string(string):
@@ -39,6 +44,7 @@ def open_url_in_chrome(url):
 def dismiss_offer(driver):
     # Click 'dismiss'
     driver.find_element(By.XPATH,"//*[@id='dismiss-button']/yt-button-shape").click()
+    time.sleep(3)
 
 #Click the necessary buttons to eventually get the auto-generated English transcript for the Youtube video
 def get_transcript(driver):
@@ -52,10 +58,11 @@ def get_transcript(driver):
     
     print("Opening transcript")
     # Click 'More actions'
-    driver.find_element(By.XPATH, "/html/body/ytd-app/div[1]/ytd-page-manager/ytd-watch-flexy/div[5]/div[1]/div/div[2]/ytd-watch-metadata/div/div[4]/div[1]/div/ytd-text-inline-expander/tp-yt-paper-button[1]").click() 
-        
+    time.sleep(15)
+    driver.find_element(By.XPATH, "//*[@id='expand']").click() 
+    time.sleep(50)
     # Click 'Open transcript'
-    driver.find_element(By.XPATH, "/html/body/ytd-app/div[1]/ytd-page-manager/ytd-watch-flexy/div[5]/div[1]/div/div[2]/ytd-watch-metadata/div/div[4]/div[1]/div/ytd-text-inline-expander/div[2]/ytd-structured-description-content-renderer/div/ytd-video-description-transcript-section-renderer/div[3]/div/ytd-button-renderer/yt-button-shape/button").click()
+    driver.find_element(By.XPATH, "//*[@aria-label='Show transcript']").click()
     time.sleep(15)
 
     # Get all transcript text
@@ -67,7 +74,7 @@ def get_transcript(driver):
 
 # Gets title of video
 def get_title(driver):
-    video_element = driver.find_element(By.XPATH, "/html/body/ytd-app/div[1]/ytd-page-manager/ytd-watch-flexy/div[5]/div[1]/div/div[2]/ytd-watch-metadata/div/div[1]/h1/yt-formatted-string")
+    video_element = driver.find_element(By.XPATH, "//*[@id='title']/h1/yt-formatted-string")
     title = video_element.text
     title = remove_special_characters_from_string(title)
     title = title.replace(" ", "_")
@@ -99,17 +106,22 @@ def webscrape_transcript(url):
     
     df = transcript2df(transcript)
 
-    return df
+    #create a csv version of the transcript
+    #df.to_csv(title + '.csv', index=False)
+
+    string_df = df.to_string()
+
+    print(len(string_df))
+
+    return string_df
 
 # Takes dataframe of transcript and uses chatGPT LLM to analyze who's speaking when and return a properly formatted transcript in the form of string
-def compile_new_transcript(scraped_df,title):
-    #create a csv version of the transcript
-    scraped_df.to_csv(title + '.csv', index=False)
-    text_transcript = scraped_df.to_string()
+def compile_new_transcript(text_transcript,title,question):
+
     completion = client.chat.completions.create(
         model = "gpt-4o-2024-08-06",
         messages = [
-            {"role":"user","content":"Hello! Can you help me format this transcript so that it shows who is speaking at which point in time? The first string of text are the timestamps and the second are the respective texts - they should match up. Reformat this so it is looks professional and include the title, who is speaking at the top, and if you can when and where this is happening at the top." + text_transcript + "The title of this video which can be found on youtube is " + title}
+            {"role":"user","content": question + text_transcript + "The title of this video which can be found on youtube is " + title}
         ]   
 
     )
@@ -132,22 +144,30 @@ def main():
 
         # Using readlines()
         file1 = open(link_file, 'r')
-        print(file1)
         Lines = file1.readlines()
-        print(Lines)
 
         # Strips the newline character (String on each new line)
         for line in Lines:
             url = line.strip()
-            final_df = webscrape_transcript(url)
-            final_transcript = compile_new_transcript(final_df,title)
-            write_text_file(final_transcript,title)        
+            text_transcript = webscrape_transcript(url)
+            if len(text_transcript)>119000:
+                a,b = split_string(text_transcript)    
+                final_transcript_a,final_transcript_b = compile_new_transcript(a,title,question),compile_new_transcript(b,title,question_2)
+                write_text_file(final_transcript_a + final_transcript_b,title)
+            else:
+                final_transcript = compile_new_transcript(text_transcript,title,question)
+                write_text_file(final_transcript,title)        
 
     else:
-        url = input("Enter Youtube Video Link: ")
-        final_df = webscrape_transcript(url)
-        final_transcript = compile_new_transcript(final_df,title)
-        write_text_file(final_transcript,title)
+        url = input("Enter Youtube video link: ")
+        text_transcript = webscrape_transcript(url)
+        if len(text_transcript)>119000:
+                a,b = split_string(text_transcript)    
+                final_transcript_a,final_transcript_b = compile_new_transcript(a,title,question),compile_new_transcript(b,title,question_2)
+                write_text_file(final_transcript_a + final_transcript_b,title)
+        else:
+                final_transcript = compile_new_transcript(text_transcript,title,question)
+                write_text_file(final_transcript,title)
 
     return "Finished:)"
 
